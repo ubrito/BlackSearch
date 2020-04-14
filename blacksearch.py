@@ -13,16 +13,22 @@ class Tela(QMainWindow):
     def __init__(self, *args, **kwargs):
         super(Tela, self).__init__(*args, **kwargs)
         self.categorias = []
-        self.dados = self.dados_salvos() #self.coleta_dados()
+
+        # Verifica se já existe dados salvos
+        #if self.dados_salvos():
+        #    self.dados = self.dados_salvos()
+        #else:
+        #    self.dados = self.coleta_dados()
+        self.dados = self.coleta_dados()
+
         self.qtd_linhas = len(self.dados)
-        #self.coleta_dados()
 
         self.cria_widgets()
-
+        self.lista_pacotes()
         self.inicia_tela()
 
     def inicia_tela(self):
-        self.setStyleSheet("Background-Color: #333333;") ##801e00
+        self.setStyleSheet("Background-Color: #333333;")  ##801e00
         self.setGeometry(60, 60, 400, 600)
         self.setFixedSize(400, 600)
         self.setWindowTitle('Busca de pacotes do BlackArch')
@@ -34,6 +40,7 @@ class Tela(QMainWindow):
         self.combo.addItems(self.categorias)
         self.combo.move(10, 120)
         self.combo.resize(280, 30)
+        self.combo.currentIndexChanged.connect(lambda: self.lista_pacotes(True))
 
         self.imagem = QLabel(self)
         self.imagem.setPixmap(QPixmap("./banner.png"))
@@ -48,15 +55,41 @@ class Tela(QMainWindow):
         self.widget = QWidget(self)
         self.area = QScrollArea(self)
 
-        for i in range(self.qtd_linhas):
+        self.widget.setLayout(self.layout)
+        self.area.setWidget(self.widget)
+
+        self.area.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.area.setWidgetResizable(True)
+        self.area.move(10, 170)
+        self.area.setFixedSize(380, 420)
+        self.area.setStyleSheet("Background-Color: #143B69;")
+
+    def lista_pacotes(self, relistar=False):
+
+        if relistar:
+            for i in range(self.layout.count()):
+                self.layout.itemAt(i).widget().close()
+            dados2 = []
+            for i in range(len(self.dados)):
+                if self.dados[i]["category"] == self.combo.currentText().strip():
+                    dados2.append(self.dados[i])
+
+            print(self.combo.currentText())
+
+        else:
+            dados2 = self.dados
+
+
+        for i in range(len(dados2)):
             frame = QFrame()
             frame.setFrameShape(QFrame.StyledPanel)
             frame.setFrameShadow(QFrame.Sunken)
             frame.setMaximumWidth(345)
             frame.setStyleSheet("Background-Color: #BBBBBB;")
-            #frame.setFrameStyle(12)
+            # frame.setFrameStyle(12)
 
-            nome = QLabel(self.dados[i]["name"])
+            nome = QLabel(dados2[i]["name"])
             nome.setAlignment(Qt.AlignCenter)
             nome.setStyleSheet(
                 "Background-color: #333333;"
@@ -65,7 +98,7 @@ class Tela(QMainWindow):
                 "Font-family: Verdana"
             )
 
-            grupo = QLabel(self.dados[i]["category"])
+            grupo = QLabel(dados2[i]["category"])
             grupo.setAlignment(Qt.AlignCenter)
             grupo.setStyleSheet(
                 "Background-color: #9ECFFF;"
@@ -73,7 +106,7 @@ class Tela(QMainWindow):
                 "font-family: 'Lucida Console'"
             )
 
-            desc = QLabel(self.dados[i]["description"])
+            desc = QLabel(dados2[i]["description"])
             desc.setWordWrap(True)
             desc.setMaximumWidth(350)
             desc.setAlignment(Qt.AlignJustify)
@@ -87,28 +120,20 @@ class Tela(QMainWindow):
             vlay.addWidget(desc)
             frame.setLayout(vlay)
 
+
             self.layout.addWidget(frame)
 
-        self.widget.setLayout(self.layout)
-        self.area.setWidget(self.widget)
-
-        self.area.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        self.area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.area.setWidgetResizable(True)
-        self.area.move(10, 170)
-        self.area.setFixedSize(380, 420)
-        self.area.setStyleSheet("Background-Color: #143B69;")
 
     def coleta_dados(self):
         page = requests.get("https://blackarch.org/tools.html")
         soup = BeautifulSoup(page.content, 'html.parser')
         table = soup.find(id="tbl-minimalist")
 
-        names = [ n.get_text() for n in table.find_all_next(itemprop="name") ]
-        versions = [ t.get_text() for t in table.find_all_next(itemprop="version") ]
-        descriptions = [ d.get_text() for d in table.find_all_next(itemprop="description") ]
-        categories = [ c.get_text() for c in table.find_all_next(itemprop="genre") ]
-        links = [ l.a.get('href') for l in table.find_all_next(itemprop="mainEntityOfPage") ]
+        names = [n.get_text() for n in table.find_all_next(itemprop="name")]
+        versions = [t.get_text() for t in table.find_all_next(itemprop="version")]
+        descriptions = [d.get_text() for d in table.find_all_next(itemprop="description")]
+        categories = [c.get_text() for c in table.find_all_next(itemprop="genre")]
+        links = [l.a.get('href') for l in table.find_all_next(itemprop="mainEntityOfPage")]
 
         self.categorias = sorted(set(categories))
 
@@ -117,11 +142,11 @@ class Tela(QMainWindow):
         for i in range(len(names)):
             dados.append(
                 {
-                    "name": names[i].strip(),
-                    "version": versions[i].strip(),
-                    "description": descriptions[i].strip(),
-                    "category": categories[i].strip(),
-                    "link": links[i].strip()
+                    "name": names[i].strip(" "),
+                    "version": versions[i].strip(" "),
+                    "description": descriptions[i].strip(" "),
+                    "category": categories[i].strip(" "),
+                    "link": links[i].strip(" ")
                 }
             )
 
@@ -129,7 +154,6 @@ class Tela(QMainWindow):
             json.dump(dados, d)
 
         return dados
-
 
     def dados_salvos(self):
         try:
@@ -143,8 +167,8 @@ class Tela(QMainWindow):
         else:
             return False
 
-def main():
 
+def main():
     '''
     if compara_dados():
         dados = dados_salvos()
@@ -154,6 +178,7 @@ def main():
     app = QApplication(sys.argv)
     main = Tela()
     sys.exit(app.exec_())
+
 
 if __name__ == '__main__':
     main()
