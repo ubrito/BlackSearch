@@ -4,43 +4,64 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 from bs4 import BeautifulSoup
-import requests
+
 import json
+import requests
 import sys
+
+
+def carregar_dados():
+    try:
+        return json.load(open('./dados.json', 'r'))
+    except FileNotFoundError:
+        return []
+
+
+def sincronizar_dados():
+    pagina = requests.get("https://blackarch.org/tools.html")
+    tabela = BeautifulSoup(pagina.content, 'html.parser').find(id="tbl-minimalist")
+
+    nomes = [n.get_text() for n in tabela.find_all_next(itemprop="name")]
+    versoes = [v.get_text() for v in tabela.find_all_next(itemprop="version")]
+    descricoes = [d.get_text() for d in tabela.find_all_next(itemprop="description")]
+    categorias = [c.get_text().strip() for c in tabela.find_all_next(itemprop="genre")]
+    links = [l.a.get('href') for l in tabela.find_all_next(itemprop="mainEntityOfPage")]
+
+    dados = []
+
+    for i in range(len(nomes)):
+        dados.append(
+            {
+                "nome": nomes[i],
+                "versao": versoes[i],
+                "descricao": descricoes[i],
+                "categoria": categorias[i],
+                "link": links[i]
+            }
+        )
+
+    with open('dados.json', 'w') as d:
+        json.dump(dados, d)
+
+    return dados
 
 
 class Tela(QMainWindow):
     def __init__(self, *args, **kwargs):
         super(Tela, self).__init__(*args, **kwargs)
-        self.categorias = []
+        self.dados = carregar_dados()
 
-        # Verifica se já existe dados salvos
-        #if self.dados_salvos():
-        #    self.dados = self.dados_salvos()
-        #else:
-        #    self.dados = self.coleta_dados()
-        self.dados = self.coleta_dados()
+        self.categorias = [d["categoria"] for d in self.dados]
+        self.categorias = sorted(set(self.categorias))
+        self.categorias[0] = "Todas"
+        # print(self.categorias)
 
-        self.qtd_linhas = len(self.dados)
-
-        self.cria_widgets()
-        self.lista_pacotes()
-        self.inicia_tela()
-
-    def inicia_tela(self):
-        self.setStyleSheet("Background-Color: #333333;")  ##801e00
-        self.setGeometry(60, 60, 400, 600)
-        self.setFixedSize(400, 600)
-        self.setWindowTitle('Busca de pacotes do BlackArch')
-        self.setWindowIcon(QIcon("./logo.png"))
-        self.show()
-
-    def cria_widgets(self):
         self.combo = QComboBox(self)  # Combo para selecionar a categoria
+        self.categorias[0] = "Todas"
         self.combo.addItems(self.categorias)
         self.combo.move(10, 120)
         self.combo.resize(280, 30)
-        self.combo.currentIndexChanged.connect(lambda: self.lista_pacotes(True))
+        self.combo.currentIndexChanged.connect(self.relistar_pacotes)
 
         self.imagem = QLabel(self)
         self.imagem.setPixmap(QPixmap("./banner.png"))
@@ -65,23 +86,26 @@ class Tela(QMainWindow):
         self.area.setFixedSize(380, 420)
         self.area.setStyleSheet("Background-Color: #143B69;")
 
-    def lista_pacotes(self, relistar=False):
+        self.listar_pacotes(self.dados)
 
-        if relistar:
-            for i in range(self.layout.count()):
-                self.layout.itemAt(i).widget().close()
-            dados2 = []
+    def relistar_pacotes(self):
+        # Limpar área para listar os pacotes da pesquisa
+        for i in range(self.layout.count()):
+            self.layout.itemAt(i).widget().close()
+
+        dados2 = []
+        if self.combo.currentText() != "Todas":
             for i in range(len(self.dados)):
-                if self.dados[i]["category"] == self.combo.currentText().strip():
+                if self.dados[i]["categoria"] == self.combo.currentText().strip():
                     dados2.append(self.dados[i])
-
-            print(self.combo.currentText())
-
         else:
-            dados2 = self.dados
+            dados2 = json.load(open('./dados.json', 'r'))
 
+        self.listar_pacotes(dados2)
 
-        for i in range(len(dados2)):
+    def listar_pacotes(self, dados):
+
+        for i in range(len(dados)):
             frame = QFrame()
             frame.setFrameShape(QFrame.StyledPanel)
             frame.setFrameShadow(QFrame.Sunken)
@@ -89,7 +113,8 @@ class Tela(QMainWindow):
             frame.setStyleSheet("Background-Color: #BBBBBB;")
             # frame.setFrameStyle(12)
 
-            nome = QLabel(dados2[i]["name"])
+            nome = QLabel(dados[i]["nome"])
+            nome.setFixedHeight(30)
             nome.setAlignment(Qt.AlignCenter)
             nome.setStyleSheet(
                 "Background-color: #333333;"
@@ -98,7 +123,8 @@ class Tela(QMainWindow):
                 "Font-family: Verdana"
             )
 
-            grupo = QLabel(dados2[i]["category"])
+            grupo = QLabel(dados[i]["categoria"])
+            grupo.setFixedHeight(20)
             grupo.setAlignment(Qt.AlignCenter)
             grupo.setStyleSheet(
                 "Background-color: #9ECFFF;"
@@ -106,7 +132,7 @@ class Tela(QMainWindow):
                 "font-family: 'Lucida Console'"
             )
 
-            desc = QLabel(dados2[i]["description"])
+            desc = QLabel(dados[i]["descricao"])
             desc.setWordWrap(True)
             desc.setMaximumWidth(350)
             desc.setAlignment(Qt.AlignJustify)
@@ -120,63 +146,23 @@ class Tela(QMainWindow):
             vlay.addWidget(desc)
             frame.setLayout(vlay)
 
-
             self.layout.addWidget(frame)
 
-
-    def coleta_dados(self):
-        page = requests.get("https://blackarch.org/tools.html")
-        soup = BeautifulSoup(page.content, 'html.parser')
-        table = soup.find(id="tbl-minimalist")
-
-        names = [n.get_text() for n in table.find_all_next(itemprop="name")]
-        versions = [t.get_text() for t in table.find_all_next(itemprop="version")]
-        descriptions = [d.get_text() for d in table.find_all_next(itemprop="description")]
-        categories = [c.get_text() for c in table.find_all_next(itemprop="genre")]
-        links = [l.a.get('href') for l in table.find_all_next(itemprop="mainEntityOfPage")]
-
-        self.categorias = sorted(set(categories))
-
-        dados = []
-
-        for i in range(len(names)):
-            dados.append(
-                {
-                    "name": names[i].strip(" "),
-                    "version": versions[i].strip(" "),
-                    "description": descriptions[i].strip(" "),
-                    "category": categories[i].strip(" "),
-                    "link": links[i].strip(" ")
-                }
-            )
-
-        with open('dados.json', 'w') as d:
-            json.dump(dados, d)
-
-        return dados
-
-    def dados_salvos(self):
-        try:
-            return json.load(open('./dados.json', 'r'))
-        except:
-            return False
-
-    def compara_dados(self):
-        if self.dados_salvos() == self.coleta_dados:
-            return True
-        else:
-            return False
+            print("listando")
+        print("Listou!!!!!!!!!!!!!!")
 
 
 def main():
-    '''
-    if compara_dados():
-        dados = dados_salvos()
-    else:
-        dados = coleta_dados()
-    '''
     app = QApplication(sys.argv)
-    main = Tela()
+
+    tela = Tela()
+    tela.setStyleSheet("Background-Color: #333333;")
+    tela.setGeometry(60, 60, 400, 600)
+    tela.setFixedSize(400, 600)
+    tela.setWindowTitle('Busca de pacotes do BlackArch')
+    tela.setWindowIcon(QIcon("./logo.png"))
+    tela.show()
+
     sys.exit(app.exec_())
 
 
