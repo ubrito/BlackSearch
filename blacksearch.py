@@ -49,7 +49,8 @@ def sincronizar_dados():
 class Tela(QMainWindow):
     def __init__(self, *args, **kwargs):
         super(Tela, self).__init__(*args, **kwargs)
-        self.dados = carregar_dados()
+        self.dados = sincronizar_dados()
+        #self.dados = carregar_dados()
 
         self.categorias = [d["categoria"] for d in self.dados]
         self.categorias = sorted(set(self.categorias))
